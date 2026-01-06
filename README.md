@@ -121,8 +121,8 @@ export function updateWelcomeData(data: Partial<WelcomeData>) {
 #### API Route (`server/api/emails/welcome.post.ts`)
 
 ```typescript
-import { defineEventHandler, readBody } from 'h3'
-import { encodeStoreToUrlParams } from '#imports'
+import { defineEventHandler, readBody, createError } from 'h3'
+import { encodeStoreToUrlParams, useRuntimeConfig } from '#imports'
 import type { WelcomeData } from '~/emails/welcome.data'
 
 export default defineEventHandler(async (event) => {
@@ -137,14 +137,33 @@ export default defineEventHandler(async (event) => {
   const baseUrl = process.env.NUXT_PUBLIC_SITE_URL || 'http://localhost:3000'
   const fullUrl = `${baseUrl}${emailUrl}`
 
-  const response = await fetch(fullUrl)
-  const html = await response.text()
+  try {
+    const response = await fetch(fullUrl)
+    const html = await response.text()
 
-  // TODO: Implement your email sending logic here
-  return {
-    success: true,
-    message: 'Email rendered successfully',
-    html,
+    // Call user-configured send handler if provided
+    const config = useRuntimeConfig()
+    const sendHandler = config.nuxtGenEmails?.sendGeneratedHtml
+
+    if (sendHandler) {
+      await sendHandler({
+        html,
+        data: body,
+      })
+    }
+
+    return {
+      success: true,
+      message: 'Email rendered successfully',
+      html,
+    }
+  }
+  catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'Failed to render or send email'
+    throw createError({
+      statusCode: 500,
+      statusMessage: message,
+    })
   }
 })
 ```
@@ -248,10 +267,101 @@ Configure the module in your `nuxt.config.ts`:
 export default defineNuxtConfig({
   modules: ['nuxt-gen-emails'],
   nuxtGenEmails: {
-    // Configuration options
+    // Optional: Configure a custom email sending handler
+    // This function is automatically called in all generated API routes after rendering
+    sendGeneratedHtml: async ({ html, data }) => {
+      // Example: Send via Resend
+      await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${process.env.RESEND_API_KEY}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          from: 'noreply@example.com',
+          to: data.email,
+          subject: data.title,
+          html: html,
+        }),
+      })
+    },
   },
 })
 ```
+
+### Module Options
+
+#### `sendGeneratedHtml`
+
+**Type:** `(params: { html: string; data: Record<string, unknown> }) => void | Promise<void>`  
+**Optional**
+
+A function that gets called automatically in all generated API routes after the email HTML is rendered. Use this to integrate with your email service provider (Resend, SendGrid, Postmark, etc.).
+
+**Parameters:**
+- `html` - The rendered email HTML string
+- `data` - The typed data object sent to the API route
+
+**Example with Resend:**
+
+```typescript
+export default defineNuxtConfig({
+  modules: ['nuxt-gen-emails'],
+  nuxtGenEmails: {
+    sendGeneratedHtml: async ({ html, data }) => {
+      const { Resend } = await import('resend')
+      const resend = new Resend(process.env.RESEND_API_KEY)
+      
+      await resend.emails.send({
+        from: 'noreply@yourdomain.com',
+        to: data.email as string,
+        subject: data.title as string,
+        html,
+      })
+    },
+  },
+})
+```
+
+**Example with SendGrid:**
+
+```typescript
+export default defineNuxtConfig({
+  modules: ['nuxt-gen-emails'],
+  nuxtGenEmails: {
+    sendGeneratedHtml: async ({ html, data }) => {
+      const sgMail = await import('@sendgrid/mail')
+      sgMail.setApiKey(process.env.SENDGRID_API_KEY!)
+      
+      await sgMail.send({
+        to: data.email as string,
+        from: 'noreply@yourdomain.com',
+        subject: data.title as string,
+        html,
+      })
+    },
+  },
+})
+```
+
+**Example with custom logging:**
+
+```typescript
+export default defineNuxtConfig({
+  modules: ['nuxt-gen-emails'],
+  nuxtGenEmails: {
+    sendGeneratedHtml: async ({ html, data }) => {
+      console.log(`📧 Email rendered successfully`)
+      console.log(`📊 Data:`, data)
+      console.log(`📄 HTML length: ${html.length} chars`)
+      
+      // Your sending logic here...
+    },
+  },
+})
+```
+
+When configured, the generated API routes automatically call this function after rendering the email HTML, making it seamless to integrate with any email service.
 
 ## Directory Structure
 

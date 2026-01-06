@@ -13,7 +13,6 @@ export interface ModuleOptions {
   sendGeneratedHtml?: (params: {
     html: string
     data: Record<string, unknown>
-    templatePath: string
   }) => void | Promise<void>
 }
 

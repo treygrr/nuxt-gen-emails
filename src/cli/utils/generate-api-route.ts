@@ -42,7 +42,6 @@ export default defineEventHandler(async (event) => {
       await sendHandler({
         html,
         data: body,
-        templatePath: '~/emails/${emailPath}.vue',
       })
     }
 
