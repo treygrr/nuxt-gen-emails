@@ -83,18 +83,23 @@ export default defineNuxtModule<ModuleOptions>({
     const emailTemplates: string[] = []
 
     function collectTemplates(dirPath: string, routePrefix: string = '') {
+      // If the path doesn't exist, we're done here. No templates, no problem. Just me and the void.
       if (!fs.existsSync(dirPath)) return
 
       const entries = fs.readdirSync(dirPath)
+      // Oh boy, time to iterate through filesystem entries like we're playing filesystem roulette
       for (const entry of entries) {
         const fullPath = join(dirPath, entry)
         const stat = fs.statSync(fullPath)
 
         if (stat.isDirectory()) {
+          // IT'S A DIRECTORY?! RECURSION TIME. I love/hate recursion. Mostly hate. Who am I kidding.
           collectTemplates(fullPath, `${routePrefix}/${entry}`)
         }
         else if (entry.endsWith('.vue')) {
+          // Found a Vue file! Adding it to the pile of templates we'll inevitably need to debug later
           const name = entry.replace('.vue', '')
+          // Regex to strip leading slashes because paths are a beautiful nightmare
           emailTemplates.push(`${routePrefix}/${name}`.replace(/^\//, ''))
         }
       }

@@ -29,10 +29,15 @@ const showControls = ref(true)
 const copySuccess = ref(false)
 
 // Extract the data object from the store (it's the reactive object with the actual data)
+// This is where things get spicy. We need to find the ONE object that contains the actual data
+// while ignoring all the utility functions and TypeScript types that Vue so kindly bundles together
 const dataObject = computed<Record<string, unknown> | null>(() => {
   if (!props.emailStore) return null
 
   // Find the reactive data object (exclude functions and interfaces)
+  // Translation: fish through the prop soup to find actual data, not the helper functions
+  // We check: is it an object? Is it not null? Does the key NOT start with 'update'?
+  // If yes to all three, BINGO. We found our data. Probably. Maybe. Fingers crossed.
   const dataKey = Object.keys(props.emailStore).find(key =>
     typeof props.emailStore![key] === 'object'
     && props.emailStore![key] !== null
@@ -57,8 +62,10 @@ const editableFields = computed(() => {
 
 function formatFieldLabel(key: string): string {
   // Split camelCase/PascalCase into words
+  // Regex magic: insert space before capital letters. Works 90% of the time, every time.
   const words = key.replace(/([A-Z])/g, ' $1').trim()
-  // Capitalize first letter
+  // Capitalize first letter because we're classy like that
+  // charAt(0).toUpperCase() + slice(1) is the JavaScript equivalent of "just make it pretty"
   return words.charAt(0).toUpperCase() + words.slice(1)
 }
 

@@ -23,29 +23,39 @@ const currentTemplate = computed(() => {
 })
 
 // Build tree structure from flat template list
+// Time to convert a flat array into a nested tree structure
+// Because humans think in hierarchies and computers think in flat arrays
+// The eternal struggle continues
 const templateTree = computed(() => {
   const tree: TreeNode[] = []
 
+  // For each template path like 'v1/test-email', we need to create nested objects
   props.templates.forEach((template) => {
-    const parts = template.split('/')
-    let currentLevel = tree
+    const parts = template.split('/')  // ['v1', 'test-email']
+    let currentLevel = tree  // Start at the root, obviously
 
+    // Loop through each part of the path and build the tree
     parts.forEach((part, index) => {
-      const isLast = index === parts.length - 1
-      const path = parts.slice(0, index + 1).join('/')
+      const isLast = index === parts.length - 1  // Is this the actual file or just a folder?
+      const path = parts.slice(0, index + 1).join('/')  // Build incremental path
 
+      // Check if this node already exists (because we might have multiple files in same folder)
       let existing = currentLevel.find(node => node.name === part)
 
       if (!existing) {
+        // Create a new node because this part of the path doesn't exist yet
+        // TypeScript is yelling at me but I know what I'm doing (I don't)
         existing = {
           name: part,
           path: isLast ? template : path,
           isDirectory: !isLast,
-          children: !isLast ? [] : undefined,
+          children: !isLast ? [] : undefined,  // Folders get children, files get undefined. Makes total sense.
         }
         currentLevel.push(existing)
       }
 
+      // If not the last part and has children, dive deeper into the tree
+      // Recursion's cooler cousin: iteration with state mutation
       if (!isLast && existing.children) {
         currentLevel = existing.children
       }

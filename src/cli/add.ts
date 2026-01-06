@@ -44,16 +44,21 @@ async function findEmailsDir(): Promise<string> {
 function getAllDirectories(dirPath: string, basePath: string = dirPath): string[] {
   const dirs: string[] = []
 
+  // Path doesn't exist? Cool. Return empty array. Problem solved. I'm a genius.
   if (!existsSync(dirPath)) {
     return dirs
   }
 
   const entries = readdirSync(dirPath)
+  // Loop through every entry and find the directories
   for (const entry of entries) {
     const fullPath = join(dirPath, entry)
+    // Check if it's a directory by asking the filesystem gods
     if (statSync(fullPath).isDirectory()) {
       const relativePath = relative(basePath, fullPath)
       dirs.push(relativePath)
+      // RECURSION AGAIN. Because apparently I enjoy watching the call stack grow
+      // This will traverse the entire directory tree. Hope there's no circular symlinks! (There probably are)
       dirs.push(...getAllDirectories(fullPath, basePath))
     }
   }
@@ -62,9 +67,13 @@ function getAllDirectories(dirPath: string, basePath: string = dirPath): string[
 }
 
 function parseTemplateName(name: string): ParsedTemplateName {
-  const namePath = name.replace(/^\.\//, '').replace(/\.vue$/, '')
+  // Strip './' prefix and '.vue' suffix because users can't be trusted to follow instructions
+  const namePath = name.replace(/^\.\//,  '').replace(/\.vue$/, '')
+  // Split on slashes to handle nested paths like 'v1/test-email'
   const parts = namePath.split('/')
+  // Pop the last element (the actual email name). The ! is us telling TypeScript "trust me bro"
   const emailName = parts.pop()!
+  // Everything else is the subdirectory path. Or nothing. Schrodinger's path.
   const subDir = parts.length > 0 ? join(...parts) : ''
 
   return { emailName, subDir }

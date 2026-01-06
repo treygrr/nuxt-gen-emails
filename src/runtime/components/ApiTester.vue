@@ -18,23 +18,32 @@ const apiEndpoint = computed(() => {
 })
 
 async function testApi() {
+  // Set loading state and clear previous results
+  // Because showing stale data is how you lose users' trust
   isLoading.value = true
   error.value = ''
   response.value = ''
 
   try {
+    // Make the POST request with our data object
+    // Pray to the HTTP gods that the network doesn't fail
     const result = await $fetch(apiEndpoint.value, {
       method: 'POST',
       body: props.dataObject,
     })
 
+    // Pretty print the JSON because we're not animals
     response.value = JSON.stringify(result, null, 2)
   }
   catch (err: unknown) {
+    // Error handling: the part of coding where we pretend we know what went wrong
+    // Check if it's an Error object or just... something else. Because JavaScript.
     error.value = err instanceof Error ? err.message : 'Failed to test API'
+    // Stringify the error too because sometimes you need to see the whole disaster
     response.value = JSON.stringify(err, null, 2)
   }
   finally {
+    // Finally block: where we clean up our mess regardless of success or failure
     isLoading.value = false
   }
 }
