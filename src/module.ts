@@ -200,8 +200,5 @@ export default defineNuxtModule<ModuleOptions>({
     if (emailFiles.length > 0) {
       console.log('Email files:', emailFiles)
     }
-
-    // Do not add the extension since the `.ts` will be transpiled to `.mjs` after `npm run prepack`
-    addPlugin(resolver.resolve('./runtime/plugin'))
   },
 })
