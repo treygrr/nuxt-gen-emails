@@ -1,4 +1,4 @@
-import { defineNuxtModule, addPlugin, createResolver, addServerHandler, extendPages, addImports, addServerImports } from '@nuxt/kit'
+import { defineNuxtModule, createResolver, addServerHandler, extendPages, addImports, addServerImports } from '@nuxt/kit'
 import { join } from 'pathe'
 import fs from 'node:fs'
 import { generateWrapperComponent } from './module-utils/generate-wrapper-component'
@@ -33,7 +33,6 @@ export default defineNuxtModule<ModuleOptions>({
 
     // Expose module options to runtime config for use in generated API routes
     nuxt.options.runtimeConfig.nuxtGenEmails = nuxt.options.runtimeConfig.nuxtGenEmails || {}
-    nuxt.options.runtimeConfig.nuxtGenEmails.hasSendHandler = !!_options.sendGeneratedHtml
 
     // Add auto-imports for URL params utilities
     addImports([
