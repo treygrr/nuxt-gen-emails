@@ -5,9 +5,10 @@ import type { TestData } from '~/emails/v1/test.data'
 export default defineEventHandler(async (event) => {
   const body = await readBody<TestData>(event)
 
-  // Generate URL with encoded store data
+  // Generate URL with encoded store data and server flag
   const params = encodeStoreToUrlParams(body)
-  const emailUrl = `/__emails/v1/test${params}`
+  const separator = params ? '&' : '?'
+  const emailUrl = `/__emails/v1/test${params}${separator}server=true`
 
   // Fetch the rendered email HTML
   const baseUrl = process.env.NUXT_PUBLIC_SITE_URL || 'http://localhost:3000'
