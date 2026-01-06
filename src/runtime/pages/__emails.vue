@@ -2,6 +2,7 @@
 import { ref, computed } from 'vue'
 import EmailTemplateSelector from '../components/EmailTemplateSelector.vue'
 import ApiTester from '../components/ApiTester.vue'
+import { definePageMeta } from '#imports'
 
 definePageMeta({
   layout: false,
