@@ -4,5 +4,8 @@
   </div>
 </template>
 
-<script setup>
+<script lang="ts" setup>
+defineOptions({
+  name: 'IndexPage',
+})
 </script>
