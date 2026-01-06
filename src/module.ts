@@ -5,7 +5,16 @@ import { generateWrapperComponent } from './module-utils/generate-wrapper-compon
 
 // Module options TypeScript interface definition
 export interface ModuleOptions {
-  sendEmailHtml: (html: string, to: string, subject: string) => Promise<void>
+  /**
+   * Optional function to send generated email HTML.
+   * Called in generated API routes after rendering the email.
+   * Can be sync or async.
+   */
+  sendGeneratedHtml?: (params: {
+    html: string
+    data: Record<string, unknown>
+    templatePath: string
+  }) => void | Promise<void>
 }
 
 export default defineNuxtModule<ModuleOptions>({
@@ -21,6 +30,10 @@ export default defineNuxtModule<ModuleOptions>({
   defaults: {},
   setup(_options, nuxt) {
     const resolver = createResolver(import.meta.url)
+
+    // Expose module options to runtime config for use in generated API routes
+    nuxt.options.runtimeConfig.nuxtGenEmails = nuxt.options.runtimeConfig.nuxtGenEmails || {}
+    nuxt.options.runtimeConfig.nuxtGenEmails.hasSendHandler = !!_options.sendGeneratedHtml
 
     // Add auto-imports for URL params utilities
     addImports([
@@ -63,6 +76,7 @@ export default defineNuxtModule<ModuleOptions>({
     // Expose emails directory via runtime config
     nuxt.options.runtimeConfig.nuxtGenEmails = {
       emailsDir,
+      sendGeneratedHtml: _options.sendGeneratedHtml,
     }
 
     // Collect email template paths for the selector

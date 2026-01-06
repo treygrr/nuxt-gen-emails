@@ -19,21 +19,34 @@ export default defineEventHandler(async (event) => {
   const baseUrl = process.env.NUXT_PUBLIC_SITE_URL || 'http://localhost:3000'
   const fullUrl = \`\${baseUrl}\${emailUrl}\`
 
-  const response = await fetch(fullUrl)
-  const html = await response.text()
+  try {
+    const response = await fetch(fullUrl)
+    const html = await response.text()
 
-  // TODO: Implement your email sending logic here
-  // Example:
-  // await sendEmail({
-  //   to: body.email,
-  //   subject: body.title,
-  //   html,
-  // })
+    // Call user-configured send handler if provided
+    const config = useRuntimeConfig()
+    const sendHandler = (config.nuxtGenEmails as any)?.sendGeneratedHtml
 
-  return {
-    success: true,
-    message: 'Email rendered successfully',
-    html, // Return the rendered HTML for preview/testing
+    if (sendHandler) {
+      await sendHandler({
+        html,
+        data: body,
+        templatePath: '${emailPath}',
+      })
+    }
+
+    return {
+      success: true,
+      message: 'Email rendered successfully',
+      html,
+    }
+  }
+  catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'Failed to render or send email'
+    throw createError({
+      statusCode: 500,
+      statusMessage: message,
+    })
   }
 })
 `
