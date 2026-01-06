@@ -1,6 +1,6 @@
 {
   "name": "nuxt-gen-emails",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "description": "A powerful Nuxt 4 module for managing email templates with live preview, reactive data stores, and automatic API route generation",
   "repository": {
     "type": "git",
