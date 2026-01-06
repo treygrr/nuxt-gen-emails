@@ -5,17 +5,22 @@
 [![License][license-src]][license-href]
 [![Nuxt][nuxt-src]][nuxt-href]
 
-A powerful Nuxt 4 module for managing email templates in your application. Build beautiful, type-safe email templates using Vue components with a seamless developer experience.
+A powerful Nuxt 4 module for managing email templates in your application. Build beautiful, type-safe email templates using Vue components with live preview, reactive data stores, and automatic API route generation.
 
-Stop wrestling with HTML email templates scattered across your codebase. `nuxt-gen-emails` brings the joy of Vue component development to email creation — complete with props, TypeScript support, and hot reloading.
+Stop wrestling with HTML email templates scattered across your codebase. `nuxt-gen-emails` brings the joy of Vue component development to email creation — complete with live preview, reactive stores, TypeScript support, and hot reloading.
 
 ## Features
 
-- 📁 **Automatic directory scanning** — Email templates are automatically discovered from your `emails/` directory
-- 🛠 **CLI scaffolding** — Quickly generate new email templates with an interactive CLI
-- 🔥 **Hot reloading** — Changes to email templates are watched and reflected instantly during development
-- 📝 **TypeScript support** — Full type safety for your email template props
-- 🎯 **Nuxt 4 compatible** — Built specifically for Nuxt 4 with modern conventions
+- 🎨 **Live Preview UI** — Interactive preview with real-time data editing at `/__emails/`
+- 📦 **Reactive Data Stores** — Auto-generated TypeScript stores for each template
+- 🔗 **URL State Sharing** — Share preview URLs with encoded data for collaboration
+- 🚀 **Auto API Routes** — Type-safe POST endpoints generated for each template
+- 🧪 **Built-in API Tester** — Test email rendering directly from the preview UI
+- 📁 **Automatic Discovery** — Email templates are automatically scanned and registered
+- 🛠 **CLI Scaffolding** — Quickly generate new templates with an interactive CLI
+- 🔥 **Hot Reloading** — Changes are watched and reflected instantly during development
+- 📝 **Full TypeScript** — Complete type safety for template data and API routes
+- 🎯 **Nuxt 4 Compatible** — Built specifically for Nuxt 4 with modern conventions
 
 ## Quick Setup
 
@@ -27,7 +32,7 @@ npx nuxi module add nuxt-gen-emails
 
 ## CLI Usage
 
-The module includes a CLI for scaffolding new email templates.
+The module includes a CLI for scaffolding new email templates with data stores and API routes.
 
 ### Add a new email template
 
@@ -35,22 +40,27 @@ The module includes a CLI for scaffolding new email templates.
 npx nuxt-gen-emails add <name>
 ```
 
+This generates:
+- ✅ Email template (`.vue` file)
+- ✅ Reactive data store (`.data.ts` file)
+- ✅ Type-safe API route (`server/api/emails/<name>.post.ts`)
+
 **Examples:**
 
 ```bash
-# Create emails/welcome.vue
+# Create emails/welcome.vue + welcome.data.ts + server/api/emails/welcome.post.ts
 npx nuxt-gen-emails add welcome
 
-# Create emails/auth/password-reset.vue (creates directories automatically)
+# Create nested structure with subdirectories
 npx nuxt-gen-emails add auth/password-reset
 
-# Create emails/v1/marketing/newsletter.vue
+# Create deeply nested templates
 npx nuxt-gen-emails add v1/marketing/newsletter
 ```
 
 ### Interactive directory selection
 
-When you run the command without a path and existing directories are found in your `emails/` folder, the CLI will prompt you:
+When you run the command without a path and existing directories are found, the CLI prompts you:
 
 ```bash
 $ npx nuxt-gen-emails add welcome
@@ -61,25 +71,173 @@ $ npx nuxt-gen-emails add welcome
   emails/auth/
 ```
 
-Use arrow keys to navigate and select the target directory for your new template.
+### Generated files
 
-### Generated template
-
-Each new email template is created with a basic structure:
+#### Email Template (`welcome.vue`)
 
 ```vue
 <script setup lang="ts">
-defineProps<{
-  name: string
-}>()
+import { onMounted } from 'vue'
+import { welcomeData } from './welcome.data'
+
+defineOptions({
+  name: 'WelcomeNge',
+})
+
+// Load data from URL params on mount
+onMounted(() => {
+  decodeUrlParamsToStore(welcomeData)
+})
 </script>
 
 <template>
   <div>
-    <h1>Hello {{ name }}</h1>
-    <p>This is the welcome email template.</p>
+    <h1>{{ welcomeData.title }}</h1>
+    <p>{{ welcomeData.message }}</p>
   </div>
 </template>
+```
+
+#### Data Store (`welcome.data.ts`)
+
+```typescript
+import { reactive } from 'vue'
+
+export interface WelcomeData extends Record<string, unknown> {
+  title: string
+  message: string
+}
+
+export const welcomeData = reactive<WelcomeData>({
+  title: 'Welcome!',
+  message: 'This is the welcome email template.',
+})
+
+export function updateWelcomeData(data: Partial<WelcomeData>) {
+  Object.assign(welcomeData, data)
+}
+```
+
+#### API Route (`server/api/emails/welcome.post.ts`)
+
+```typescript
+import { defineEventHandler, readBody } from 'h3'
+import { encodeStoreToUrlParams } from '#imports'
+import type { WelcomeData } from '~/emails/welcome.data'
+
+export default defineEventHandler(async (event) => {
+  const body = await readBody<WelcomeData>(event)
+
+  // Generate URL with encoded store data and server flag
+  const params = encodeStoreToUrlParams(body)
+  const separator = params ? '&' : '?'
+  const emailUrl = `/__emails/welcome${params}${separator}server=true`
+
+  // Fetch the rendered email HTML
+  const baseUrl = process.env.NUXT_PUBLIC_SITE_URL || 'http://localhost:3000'
+  const fullUrl = `${baseUrl}${emailUrl}`
+
+  const response = await fetch(fullUrl)
+  const html = await response.text()
+
+  // TODO: Implement your email sending logic here
+  return {
+    success: true,
+    message: 'Email rendered successfully',
+    html,
+  }
+})
+```
+
+## Live Preview
+
+Navigate to `/__emails/` in your browser to access the interactive preview UI:
+
+### Features:
+
+- 📝 **Template Selector** — Dropdown with nested folder support to switch between templates
+- ✏️ **Live Data Editor** — Modify template data in real-time and see instant updates
+- 🔗 **Share URL** — Generate shareable URLs with encoded data state
+- 🧪 **API Tester** — Test POST requests and see rendered HTML output
+- 🎨 **Modern UI** — Clean, professional interface matching Nuxt design language
+
+### URL State Management
+
+The preview system supports URL-based state sharing:
+
+```bash
+# Preview with custom data
+http://localhost:3000/__emails/welcome?title=Hello&message=World
+
+# Server-only mode (no UI, just email HTML)
+http://localhost:3000/__emails/welcome?server=true
+```
+
+### Auto-Imported Utilities
+
+The module provides auto-imported utilities for working with URL parameters:
+
+```typescript
+// Encode store data to URL params
+const params = encodeStoreToUrlParams(welcomeData)
+// Returns: "?title=Hello&message=World"
+
+// Decode URL params and update store
+decodeUrlParamsToStore(welcomeData)
+// Reads current URL and updates store with query params
+
+// Generate shareable URL
+const url = generateShareableUrl(welcomeData)
+// Returns: "http://localhost:3000/__emails/welcome?title=Hello&message=World"
+```
+
+## API Integration
+
+### Sending Emails
+
+Use the auto-generated API routes to render and send emails:
+
+```typescript
+// POST to the email endpoint with your data
+const response = await $fetch('/api/emails/welcome', {
+  method: 'POST',
+  body: {
+    title: 'Welcome to our app!',
+    message: 'Thanks for signing up.',
+  },
+})
+
+// Response includes rendered HTML
+console.log(response.html) // Rendered email HTML
+```
+
+### Integration Example
+
+```typescript
+// server/api/auth/register.post.ts
+export default defineEventHandler(async (event) => {
+  const { email, name } = await readBody(event)
+  
+  // Create user...
+  
+  // Render and send welcome email
+  const { html } = await $fetch('/api/emails/welcome', {
+    method: 'POST',
+    body: {
+      title: `Welcome ${name}!`,
+      message: 'Thanks for joining us.',
+    },
+  })
+  
+  // Send the email using your email service
+  await sendEmail({
+    to: email,
+    subject: 'Welcome!',
+    html,
+  })
+  
+  return { success: true }
+})
 ```
 
 ## Configuration
@@ -103,13 +261,45 @@ Email templates should be placed in the `emails/` directory within your Nuxt app
 app/
 ├── emails/
 │   ├── welcome.vue
+│   ├── welcome.data.ts
 │   ├── auth/
 │   │   ├── password-reset.vue
-│   │   └── verify-email.vue
+│   │   ├── password-reset.data.ts
+│   │   ├── verify-email.vue
+│   │   └── verify-email.data.ts
 │   └── marketing/
-│       └── newsletter.vue
+│       ├── newsletter.vue
+│       └── newsletter.data.ts
 ├── pages/
+├── server/
+│   └── api/
+│       └── emails/
+│           ├── welcome.post.ts
+│           ├── auth/
+│           │   ├── password-reset.post.ts
+│           │   └── verify-email.post.ts
+│           └── marketing/
+│               └── newsletter.post.ts
 └── app.vue
+```
+
+## Development
+
+```bash
+# Install dependencies
+pnpm install
+
+# Generate type stubs
+pnpm dev:prepare
+
+# Develop with the playground
+pnpm dev
+
+# Build the module
+pnpm prepack
+
+# Run ESLint
+pnpm lint
 ```
 
 ## License

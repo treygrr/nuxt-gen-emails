@@ -30,9 +30,9 @@ async function testApi() {
 
     response.value = JSON.stringify(result, null, 2)
   }
-  catch (err: any) {
-    error.value = err.message || 'Failed to test API'
-    response.value = JSON.stringify(err.data || err, null, 2)
+  catch (err: unknown) {
+    error.value = err instanceof Error ? err.message : 'Failed to test API'
+    response.value = JSON.stringify(err, null, 2)
   }
   finally {
     isLoading.value = false

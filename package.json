@@ -1,8 +1,21 @@
 {
   "name": "nuxt-gen-emails",
   "version": "1.0.0",
-  "description": "My new Nuxt module",
-  "repository": "your-org/my-module",
+  "description": "A powerful Nuxt 4 module for managing email templates with live preview, reactive data stores, and automatic API route generation",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/treygrr/nuxt-gen-emails.git"
+  },
+  "keywords": [
+    "nuxt",
+    "nuxt-module",
+    "email",
+    "templates",
+    "preview",
+    "vue",
+    "typescript"
+  ],
+  "author": "Gilbert Rogers",
   "license": "MIT",
   "type": "module",
   "bin": {
