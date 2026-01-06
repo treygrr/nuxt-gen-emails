@@ -2,10 +2,10 @@ import { capitalize } from './string-utils'
 
 export function generateDataTemplate(emailName: string): string {
   const className = capitalize(emailName)
-  
+
   return `import { reactive } from 'vue'
 
-export interface ${className}Data {
+export interface ${className}Data extends Record<string, unknown> {
   title: string
   message: string
 }

@@ -1,6 +1,6 @@
 import { reactive } from 'vue'
 
-export interface TestData {
+export interface TestData extends Record<string, unknown> {
   title: string
   message: string
 }

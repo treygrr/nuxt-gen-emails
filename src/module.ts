@@ -1,7 +1,7 @@
-import { defineNuxtModule, addPlugin, createResolver, addServerHandler, extendPages } from '@nuxt/kit'
-import type { NuxtPage } from '@nuxt/schema'
+import { defineNuxtModule, addPlugin, createResolver, addServerHandler, extendPages, addImports, addServerImports } from '@nuxt/kit'
 import { join } from 'pathe'
 import fs from 'node:fs'
+import { generateWrapperComponent } from './module-utils/generate-wrapper-component'
 
 // Module options TypeScript interface definition
 export interface ModuleOptions {
@@ -22,15 +22,75 @@ export default defineNuxtModule<ModuleOptions>({
   setup(_options, nuxt) {
     const resolver = createResolver(import.meta.url)
 
+    // Add auto-imports for URL params utilities
+    addImports([
+      {
+        name: 'encodeStoreToUrlParams',
+        from: resolver.resolve('./runtime/utils/url-params'),
+      },
+      {
+        name: 'decodeUrlParamsToStore',
+        from: resolver.resolve('./runtime/utils/url-params'),
+      },
+      {
+        name: 'generateShareableUrl',
+        from: resolver.resolve('./runtime/utils/url-params'),
+      },
+    ])
+
+    // Add server-side imports for URL params utilities
+    addServerImports([
+      {
+        name: 'encodeStoreToUrlParams',
+        from: resolver.resolve('./runtime/utils/url-params'),
+      },
+    ])
+
     // Register the emails directory in the app directory
     const emailsDir = join(nuxt.options.srcDir, 'emails')
     if (fs.existsSync(emailsDir)) {
       nuxt.options.watch.push(emailsDir)
     }
 
+    // Watch for new email files and trigger restart
+    nuxt.hook('builder:watch', async (event, path) => {
+      if (path.startsWith(emailsDir) && path.endsWith('.vue')) {
+        console.log('New email template detected, restarting...')
+        await nuxt.callHook('restart')
+      }
+    })
+
     // Expose emails directory via runtime config
     nuxt.options.runtimeConfig.nuxtGenEmails = {
       emailsDir,
+    }
+
+    // Collect email template paths for the selector
+    const emailTemplates: string[] = []
+
+    function collectTemplates(dirPath: string, routePrefix: string = '') {
+      if (!fs.existsSync(dirPath)) return
+
+      const entries = fs.readdirSync(dirPath)
+      for (const entry of entries) {
+        const fullPath = join(dirPath, entry)
+        const stat = fs.statSync(fullPath)
+
+        if (stat.isDirectory()) {
+          collectTemplates(fullPath, `${routePrefix}/${entry}`)
+        }
+        else if (entry.endsWith('.vue')) {
+          const name = entry.replace('.vue', '')
+          emailTemplates.push(`${routePrefix}/${name}`.replace(/^\//, ''))
+        }
+      }
+    }
+
+    collectTemplates(emailsDir)
+
+    // Expose email templates via runtime config
+    nuxt.options.runtimeConfig.public.nuxtGenEmails = {
+      templates: emailTemplates,
     }
 
     // Add the server route handler for /api/nge/*
@@ -62,34 +122,24 @@ export default defineNuxtModule<ModuleOptions>({
 
             // Create a wrapper page that includes both the toolbar and the email component
             const wrapperPath = join(nuxt.options.buildDir, 'email-wrappers', `${routePrefix}/${name}.vue`.replace(/^\//, ''))
-            
+
             // Ensure directory exists
             const wrapperDir = join(nuxt.options.buildDir, 'email-wrappers', routePrefix.replace(/^\//, ''))
             if (!fs.existsSync(wrapperDir)) {
               fs.mkdirSync(wrapperDir, { recursive: true })
             }
 
-            // Check if data store exists
-            const dataStorePath = fullPath.replace('.vue', '.data.ts')
-            const hasDataStore = fs.existsSync(dataStorePath)
+            // Check if data store file exists
+            const dataFilePath = fullPath.replace('.vue', '.data.ts')
+            const hasDataStore = fs.existsSync(dataFilePath)
 
-            // Write wrapper component
-            const wrapperContent = `<script setup lang="ts">
-import EmailsLayout from '${resolver.resolve('./runtime/pages/__emails.vue')}'
-import EmailComponent from '${fullPath}'${hasDataStore ? `
-import * as emailStore from '${dataStorePath}'` : ''}
+            // Generate wrapper component
+            const wrapperContent = generateWrapperComponent(
+              resolver.resolve('./runtime/pages/__emails.vue'),
+              fullPath,
+              hasDataStore ? dataFilePath : undefined,
+            )
 
-definePageMeta({
-  layout: false,
-})
-</script>
-
-<template>
-  <EmailsLayout${hasDataStore ? ' :email-store="emailStore"' : ''}>
-    <EmailComponent />
-  </EmailsLayout>
-</template>
-`
             fs.writeFileSync(wrapperPath, wrapperContent, 'utf-8')
 
             const pageName = `email${routePrefix.replace(/\//g, '-')}-${name}`.replace(/^-+/, '')

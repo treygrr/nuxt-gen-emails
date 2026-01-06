@@ -1,8 +1,14 @@
 <script setup lang="ts">
+import { onMounted } from 'vue'
 import { testData } from './test.data'
 
 defineOptions({
   name: 'TestNge',
+})
+
+// Load data from URL params on mount
+onMounted(() => {
+  decodeUrlParamsToStore(testData)
 })
 </script>
 
