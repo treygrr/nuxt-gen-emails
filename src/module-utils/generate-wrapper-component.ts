@@ -10,6 +10,7 @@ export function generateWrapperComponent(
   // Generate a string template that is a Vue SFC. Yes, we're generating code that generates UI.
   // Welcome to meta-programming, where your brain hurts and the stack traces are meaningless.
   return `<script setup lang="ts">
+import { definePageMeta } from '#imports'
 import EmailsLayout from '${emailsLayoutPath}'
 import EmailComponent from '${emailComponentPath}'${hasDataStore
   ? `
