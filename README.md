@@ -230,25 +230,91 @@ const url = generateShareableUrl(welcomeData)
 
 ## API Integration
 
-### Sending Emails
+### Sending Emails from Backend Services
 
-Use the auto-generated API routes to render and send emails:
+The auto-generated API routes are designed to be called by external backend services, microservices, or any server that needs to render and send emails. Your backend simply makes an HTTP POST request with the email data.
 
 ```typescript
-// POST to the email endpoint with your data
-const response = await $fetch('/api/emails/welcome', {
+// Example: Node.js backend service
+const response = await fetch('https://your-email-service.com/api/emails/welcome', {
   method: 'POST',
-  body: {
+  headers: {
+    'Content-Type': 'application/json',
+    'x-api-key': process.env.EMAIL_SERVICE_API_KEY,
+  },
+  body: JSON.stringify({
     title: 'Welcome to our app!',
     message: 'Thanks for signing up.',
-  },
+    email: 'user@example.com',
+  }),
 })
 
-// Response includes rendered HTML
-console.log(response.html) // Rendered email HTML
+const result = await response.json()
+console.log(result.html) // Rendered email HTML
+```
+
+```python
+# Example: Python backend service
+import requests
+import os
+
+response = requests.post(
+    'https://your-email-service.com/api/emails/welcome',
+    headers={
+        'Content-Type': 'application/json',
+        'x-api-key': os.getenv('EMAIL_SERVICE_API_KEY'),
+    },
+    json={
+        'title': 'Welcome to our app!',
+        'message': 'Thanks for signing up.',
+        'email': 'user@example.com',
+    }
+)
+
+result = response.json()
+print(result['html'])  # Rendered email HTML
 ```
 
 ### Integration Example
+
+Here's a complete example of a separate authentication service calling the email rendering service:
+
+```typescript
+// Separate backend service (e.g., user-service)
+export async function registerUser(email: string, name: string) {
+  // Create user in database...
+  
+  // Call the email rendering service
+  const response = await fetch('https://email-service.yourdomain.com/api/emails/welcome', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-api-key': process.env.EMAIL_SERVICE_API_KEY,
+    },
+    body: JSON.stringify({
+      email: email,
+      name: name,
+      title: `Welcome ${name}!`,
+      message: 'Thanks for joining us.',
+    }),
+  })
+  
+  if (!response.ok) {
+    throw new Error('Failed to send welcome email')
+  }
+  
+  const { html } = await response.json()
+  
+  // Email is automatically sent via Nitro hook
+  // Or you can use the HTML to send via your own email provider
+  
+  return { success: true }
+}
+```
+
+**Within the same Nuxt app:**
+
+If you need to send emails from within the same Nuxt application, you can call the API routes internally:
 
 ```typescript
 // server/api/auth/register.post.ts
@@ -257,20 +323,18 @@ export default defineEventHandler(async (event) => {
   
   // Create user...
   
-  // Render and send welcome email
+  // Call internal email API
   const { html } = await $fetch('/api/emails/welcome', {
     method: 'POST',
+    headers: {
+      'x-api-key': useRuntimeConfig().nuxtGenEmails.apiKey as string,
+    },
     body: {
+      email,
+      name,
       title: `Welcome ${name}!`,
       message: 'Thanks for joining us.',
     },
-  })
-  
-  // Send the email using your email service
-  await sendEmail({
-    to: email,
-    subject: 'Welcome!',
-    html,
   })
   
   return { success: true }
