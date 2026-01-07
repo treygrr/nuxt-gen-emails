@@ -5,6 +5,10 @@
 [![License][license-src]][license-href]
 [![Nuxt][nuxt-src]][nuxt-href]
 
+> ⚠️ **Warning: Under Active Development**
+> 
+> This module is currently in early development and is **not production-ready**. APIs, features, and configuration options are subject to breaking changes without notice. Use at your own risk and do not deploy to production environments.
+
 A powerful Nuxt 4 module for managing email templates in your application. Build beautiful, type-safe email templates using Vue components with live preview, reactive data stores, and automatic API route generation.
 
 Stop wrestling with HTML email templates scattered across your codebase. `nuxt-gen-emails` brings the joy of Vue component development to email creation — complete with live preview, reactive stores, TypeScript support, and hot reloading.
@@ -15,6 +19,7 @@ Stop wrestling with HTML email templates scattered across your codebase. `nuxt-g
 - 📦 **Reactive Data Stores** — Auto-generated TypeScript stores for each template
 - 🔗 **URL State Sharing** — Share preview URLs with encoded data for collaboration
 - 🚀 **Auto API Routes** — Type-safe POST endpoints generated for each template
+- 🔐 **API Security** — Built-in API key authentication and rate limiting
 - 🧪 **Built-in API Tester** — Test email rendering directly from the preview UI
 - 📁 **Automatic Discovery** — Email templates are automatically scanned and registered
 - 🛠 **CLI Scaffolding** — Quickly generate new templates with an interactive CLI
@@ -267,23 +272,38 @@ Configure the module in your `nuxt.config.ts`:
 export default defineNuxtConfig({
   modules: ['nuxt-gen-emails'],
   nuxtGenEmails: {
-    // Optional: Configure a custom email sending handler
-    // This function is automatically called in all generated API routes after rendering
-    sendGeneratedHtml: async ({ html, data }) => {
-      // Example: Send via Resend
-      await fetch('https://api.resend.com/emails', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${process.env.RESEND_API_KEY}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          from: 'noreply@example.com',
-          to: data.email,
-          subject: data.title,
-          html: html,
-        }),
-      })
+    // Optional: Set a custom email directory (default: 'emails')
+    emailDir: 'emails',
+    
+    // Optional: Configure API key for authentication
+    apiKey: 'your-secret-key-here',
+    
+    // Optional: Configure rate limiting
+    rateLimit: {
+      maxRequests: 10,
+      windowMs: 60000, // 1 minute
+    },
+  },
+  
+  // Hook into email sending via Nitro hooks
+  nitro: {
+    hooks: {
+      'nuxt-gen-emails:send': async ({ html, data }) => {
+        // Example: Send via Resend
+        await fetch('https://api.resend.com/emails', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${process.env.RESEND_API_KEY}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            from: 'noreply@example.com',
+            to: data.email,
+            subject: data.title,
+            html: html,
+          }),
+        })
+      },
     },
   },
 })
@@ -291,33 +311,103 @@ export default defineNuxtConfig({
 
 ### Module Options
 
-#### `sendGeneratedHtml`
+#### `emailDir`
 
-**Type:** `(params: { html: string; data: Record<string, unknown> }) => void | Promise<void>`  
-**Optional**
+**Type:** `string`  
+**Default:** `'emails'`
 
-A function that gets called automatically in all generated API routes after the email HTML is rendered. Use this to integrate with your email service provider (Resend, SendGrid, Postmark, etc.).
+The directory where email templates are stored. Can be relative to your app's source directory or an absolute path.
 
-**Parameters:**
-- `html` - The rendered email HTML string
-- `data` - The typed data object sent to the API route
+```typescript
+export default defineNuxtConfig({
+  nuxtGenEmails: {
+    emailDir: 'app/email-templates', // Custom directory
+  },
+})
+```
+
+#### `apiKey`
+
+**Type:** `string | false`  
+**Default:** Auto-generated on first run
+
+API key for authenticating requests to email generation endpoints. This secures your API routes from unauthorized access.
+
+- If not provided, a random key is generated and logged on startup
+- Set to `false` to disable authentication (**not recommended for production**)
+- Copy the generated key from console and add to your config to persist it
+
+```typescript
+export default defineNuxtConfig({
+  nuxtGenEmails: {
+    apiKey: process.env.NUXT_GEN_EMAILS_API_KEY, // Recommended: use environment variable
+    // apiKey: false, // Disable authentication (NOT recommended for production)
+  },
+})
+```
+
+**Making authenticated requests:**
+
+```typescript
+// Include API key in request header
+await $fetch('/api/emails/welcome', {
+  method: 'POST',
+  headers: {
+    'x-api-key': 'your-api-key-here',
+    // Or use Authorization header
+    // 'Authorization': 'Bearer your-api-key-here',
+  },
+  body: {
+    title: 'Welcome!',
+    message: 'Hello World',
+  },
+})
+```
+
+#### `rateLimit`
+
+**Type:** `{ maxRequests: number; windowMs: number } | false`  
+**Default:** `{ maxRequests: 10, windowMs: 60000 }`
+
+Rate limiting configuration to prevent abuse of email generation endpoints. Limits are tracked per IP address.
+
+- `maxRequests` - Maximum number of requests allowed per time window
+- `windowMs` - Time window in milliseconds
+- Set to `false` to disable rate limiting
+
+```typescript
+export default defineNuxtConfig({
+  nuxtGenEmails: {
+    rateLimit: {
+      maxRequests: 20,  // Allow 20 requests
+      windowMs: 60000,  // Per 1 minute
+    },
+    // rateLimit: false, // Disable rate limiting
+  },
+})
+```
+
+### Sending Emails via Nitro Hooks
+
+The module uses Nitro hooks for email sending integration. Hook into the `nuxt-gen-emails:send` event to integrate with your email service provider.
 
 **Example with Resend:**
 
 ```typescript
 export default defineNuxtConfig({
-  modules: ['nuxt-gen-emails'],
-  nuxtGenEmails: {
-    sendGeneratedHtml: async ({ html, data }) => {
-      const { Resend } = await import('resend')
-      const resend = new Resend(process.env.RESEND_API_KEY)
-      
-      await resend.emails.send({
-        from: 'noreply@yourdomain.com',
-        to: data.email as string,
-        subject: data.title as string,
-        html,
-      })
+  nitro: {
+    hooks: {
+      'nuxt-gen-emails:send': async ({ html, data }) => {
+        const { Resend } = await import('resend')
+        const resend = new Resend(process.env.RESEND_API_KEY)
+        
+        await resend.emails.send({
+          from: 'noreply@yourdomain.com',
+          to: data.email as string,
+          subject: data.title as string,
+          html,
+        })
+      },
     },
   },
 })
@@ -327,18 +417,19 @@ export default defineNuxtConfig({
 
 ```typescript
 export default defineNuxtConfig({
-  modules: ['nuxt-gen-emails'],
-  nuxtGenEmails: {
-    sendGeneratedHtml: async ({ html, data }) => {
-      const sgMail = await import('@sendgrid/mail')
-      sgMail.setApiKey(process.env.SENDGRID_API_KEY!)
-      
-      await sgMail.send({
-        to: data.email as string,
-        from: 'noreply@yourdomain.com',
-        subject: data.title as string,
-        html,
-      })
+  nitro: {
+    hooks: {
+      'nuxt-gen-emails:send': async ({ html, data }) => {
+        const sgMail = await import('@sendgrid/mail')
+        sgMail.setApiKey(process.env.SENDGRID_API_KEY!)
+        
+        await sgMail.send({
+          to: data.email as string,
+          from: 'noreply@yourdomain.com',
+          subject: data.title as string,
+          html,
+        })
+      },
     },
   },
 })
@@ -348,20 +439,21 @@ export default defineNuxtConfig({
 
 ```typescript
 export default defineNuxtConfig({
-  modules: ['nuxt-gen-emails'],
-  nuxtGenEmails: {
-    sendGeneratedHtml: async ({ html, data }) => {
-      console.log(`📧 Email rendered successfully`)
-      console.log(`📊 Data:`, data)
-      console.log(`📄 HTML length: ${html.length} chars`)
-      
-      // Your sending logic here...
+  nitro: {
+    hooks: {
+      'nuxt-gen-emails:send': async ({ html, data }) => {
+        console.log(`📧 Email rendered successfully`)
+        console.log(`📊 Data:`, data)
+        console.log(`📄 HTML length: ${html.length} chars`)
+        
+        // Your sending logic here...
+      },
     },
   },
 })
 ```
 
-When configured, the generated API routes automatically call this function after rendering the email HTML, making it seamless to integrate with any email service.
+The generated API routes automatically call this hook after rendering the email HTML, making it seamless to integrate with any email service.
 
 ## Directory Structure
 
