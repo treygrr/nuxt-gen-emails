@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { defineCommand, runMain } from 'citty'
 import addCommand from './add'
+import regenerateCommand from './regenerate'
 
 const main = defineCommand({
   meta: {
@@ -10,6 +11,7 @@ const main = defineCommand({
   },
   subCommands: {
     add: addCommand,
+    regenerate: regenerateCommand,
   },
 })
 
