@@ -1,6 +1,5 @@
 import { defineCommand } from 'citty'
 import { consola } from 'consola'
-import { resolve } from 'pathe'
 import { loadNuxt } from '@nuxt/kit'
 
 export default defineCommand({

@@ -89,6 +89,24 @@ $ npx nuxt-gen-emails add welcome
   emails/auth/
 ```
 
+### Regenerate routes
+
+If you need to manually regenerate email routes and wrappers:
+
+```bash
+npx nuxt-gen-emails regenerate
+```
+
+This command:
+- ✅ Regenerates all email route wrappers
+- ✅ Updates the template registry
+- ✅ Rebuilds the Nuxt routes
+
+**Note:** Routes are automatically regenerated when you:
+- Add or modify `.vue` email templates
+- Change `.data.ts` files
+- The module watches for changes and triggers a restart automatically
+
 ### Generated files
 
 #### Email Template (`welcome.vue`)

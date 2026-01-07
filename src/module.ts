@@ -101,10 +101,16 @@ export default defineNuxtModule<ModuleOptions>({
       nuxt.options.watch.push(emailsDir)
     }
 
-    // Watch for new email files and trigger restart
+    // Watch for email file changes and trigger restart
     nuxt.hook('builder:watch', async (event, path) => {
+      // Watch for .vue file changes (new templates or modifications)
       if (path.startsWith(emailsDir) && path.endsWith('.vue')) {
-        console.log('New email template detected, restarting...')
+        console.log('[nuxt-gen-emails] Email template change detected, restarting...')
+        await nuxt.callHook('restart')
+      }
+      // Watch for .data.ts file changes (data store modifications)
+      else if (path.startsWith(emailsDir) && path.endsWith('.data.ts')) {
+        console.log('[nuxt-gen-emails] Email data store change detected, restarting...')
         await nuxt.callHook('restart')
       }
     })
