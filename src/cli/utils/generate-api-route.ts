@@ -7,11 +7,55 @@ export function generateApiRoute(emailName: string, emailPath: string): string {
   // Return a generated API route that handles POST requests
   // This is code generation inception: code that writes code that handles HTTP requests
   // My therapist says this is "normal" in web development. I don't believe them.
-  return `import { defineEventHandler, readBody, createError } from 'h3'
+  return `import { defineEventHandler, readBody, createError, getHeader } from 'h3'
 import { encodeStoreToUrlParams, useRuntimeConfig } from '#imports'
 import type { ${className}Data } from '~/emails/${emailPath}.data'
 
+// Simple in-memory rate limiter (resets on server restart)
+const rateLimitStore = new Map<string, { count: number; resetTime: number }>()
+
 export default defineEventHandler(async (event) => {
+  const config = useRuntimeConfig()
+
+  // Authentication check
+  if (config.nuxtGenEmails.apiKey !== false) {
+    const providedKey = getHeader(event, 'x-api-key') || getHeader(event, 'authorization')?.replace('Bearer ', '')
+
+    if (!providedKey || providedKey !== config.nuxtGenEmails.apiKey) {
+      throw createError({
+        statusCode: 401,
+        statusMessage: 'Unauthorized: Invalid or missing API key',
+      })
+    }
+  }
+
+  // Rate limiting check
+  if (config.nuxtGenEmails.rateLimit !== false) {
+    const clientIp = getHeader(event, 'x-forwarded-for') || event.node.req.socket.remoteAddress || 'unknown'
+    const now = Date.now()
+    const limit = config.nuxtGenEmails.rateLimit
+
+    const clientData = rateLimitStore.get(clientIp) || { count: 0, resetTime: now + limit.windowMs }
+
+    // Reset if window expired
+    if (now > clientData.resetTime) {
+      clientData.count = 0
+      clientData.resetTime = now + limit.windowMs
+    }
+
+    // Check limit
+    if (clientData.count >= limit.maxRequests) {
+      throw createError({
+        statusCode: 429,
+        statusMessage: 'Too Many Requests: Rate limit exceeded',
+      })
+    }
+
+    // Increment counter
+    clientData.count++
+    rateLimitStore.set(clientIp, clientData)
+  }
+
   // Read the POST body as typed data. Type safety in JavaScript? What a time to be alive.
   const body = await readBody<${className}Data>(event)
 
@@ -32,18 +76,12 @@ export default defineEventHandler(async (event) => {
     const response = await fetch(fullUrl)
     const html = await response.text()
 
-    // Call user-configured send handler if provided
+    // Call Nitro hook to allow users to send the email
     // This is where users can hook in their Resend/SendGrid/carrier pigeon integration
-    const config = useRuntimeConfig()
-    const sendHandler = config.nuxtGenEmails?.sendGeneratedHtml
-
-    if (sendHandler) {
-      // Call the handler and pray it doesn't throw. Spoiler: it will.
-      await sendHandler({
-        html,
-        data: body,
-      })
-    }
+    await event.context.nitro.hooks.callHook('nuxt-gen-emails:send', {
+      html,
+      data: body,
+    })
 
     return {
       success: true,

@@ -1,19 +1,28 @@
-import { defineNuxtModule, createResolver, addServerHandler, extendPages, addImports, addServerImports } from '@nuxt/kit'
+import { defineNuxtModule, createResolver, extendPages, addImports, addServerImports } from '@nuxt/kit'
 import { join } from 'pathe'
 import fs from 'node:fs'
 import { generateWrapperComponent } from './module-utils/generate-wrapper-component'
 
 // Module options TypeScript interface definition
 export interface ModuleOptions {
+  /** Directory containing email templates; resolved from srcDir when relative. */
+  emailDir?: string
   /**
-   * Optional function to send generated email HTML.
-   * Called in generated API routes after rendering the email.
-   * Can be sync or async.
+   * API key for authenticating email generation requests.
+   * If not provided, a random key will be generated and logged.
+   * Set to false to disable authentication (not recommended for production).
    */
-  sendGeneratedHtml?: (params: {
-    html: string
-    data: Record<string, unknown>
-  }) => void | Promise<void>
+  apiKey?: string | false
+  /**
+   * Rate limiting configuration for email API endpoints.
+   * @default { maxRequests: 10, windowMs: 60000 }
+   */
+  rateLimit?: {
+    /** Maximum number of requests per time window */
+    maxRequests: number
+    /** Time window in milliseconds */
+    windowMs: number
+  } | false
 }
 
 export default defineNuxtModule<ModuleOptions>({
@@ -26,12 +35,31 @@ export default defineNuxtModule<ModuleOptions>({
     },
   },
   // Default configuration options of the Nuxt module
-  defaults: {},
-  setup(_options, nuxt) {
+  defaults: {
+    emailDir: 'emails',
+    rateLimit: {
+      maxRequests: 10,
+      windowMs: 60000, // 1 minute
+    },
+  },
+  setup(options, nuxt) {
     const resolver = createResolver(import.meta.url)
 
-    // Expose module options to runtime config for use in generated API routes
-    nuxt.options.runtimeConfig.nuxtGenEmails = nuxt.options.runtimeConfig.nuxtGenEmails || {}
+    // Generate or validate API key
+    let apiKey: string | false = false
+    if (options.apiKey === false) {
+      console.warn('[nuxt-gen-emails] API authentication is disabled. This is not recommended for production!')
+      apiKey = false
+    }
+    else if (options.apiKey && typeof options.apiKey === 'string') {
+      apiKey = options.apiKey
+    }
+    else {
+      // Generate a random API key
+      apiKey = `nge_${Math.random().toString(36).substring(2, 15)}${Math.random().toString(36).substring(2, 15)}`
+      console.log(`[nuxt-gen-emails] Generated API Key: ${apiKey}`)
+      console.log('[nuxt-gen-emails] Set this in your nuxt.config.ts to persist it across restarts')
+    }
 
     // Add auto-imports for URL params utilities
     addImports([
@@ -58,7 +86,17 @@ export default defineNuxtModule<ModuleOptions>({
     ])
 
     // Register the emails directory in the app directory
-    const emailsDir = join(nuxt.options.srcDir, 'emails')
+    const configuredEmailDir = options.emailDir ?? 'emails'
+
+    const emailsDir = join(nuxt.options.srcDir, configuredEmailDir)
+
+    // Expose emails directory and security config via runtime config
+    nuxt.options.runtimeConfig.nuxtGenEmails = {
+      emailsDir,
+      apiKey,
+      rateLimit: options.rateLimit,
+    }
+
     if (fs.existsSync(emailsDir)) {
       nuxt.options.watch.push(emailsDir)
     }
@@ -70,12 +108,6 @@ export default defineNuxtModule<ModuleOptions>({
         await nuxt.callHook('restart')
       }
     })
-
-    // Expose emails directory via runtime config
-    nuxt.options.runtimeConfig.nuxtGenEmails = {
-      emailsDir,
-      sendGeneratedHtml: _options.sendGeneratedHtml,
-    }
 
     // Collect email template paths for the selector
     const emailTemplates: string[] = []
@@ -109,12 +141,6 @@ export default defineNuxtModule<ModuleOptions>({
     nuxt.options.runtimeConfig.public.nuxtGenEmails = {
       templates: emailTemplates,
     }
-
-    // Add the server route handler for /api/nge/*
-    addServerHandler({
-      route: '/api/nge/**',
-      handler: resolver.resolve('./runtime/server/nge/[...].post'),
-    })
 
     // Register email preview pages under /__emails/
     extendPages((pages) => {
@@ -172,31 +198,31 @@ export default defineNuxtModule<ModuleOptions>({
       addEmailPages(emailsDir)
     })
 
-    // find emails in the emails directory and list all files and subdirectories
+    // // find emails in the emails directory and list all files and subdirectories
 
-    function getAllEmailFiles(dirPath: string, arrayOfFiles: string[] = []) {
-      if (!fs.existsSync(dirPath)) {
-        return arrayOfFiles
-      }
+    // function getAllEmailFiles(dirPath: string, arrayOfFiles: string[] = []) {
+    //   if (!fs.existsSync(dirPath)) {
+    //     return arrayOfFiles
+    //   }
 
-      const files = fs.readdirSync(dirPath)
+    //   const files = fs.readdirSync(dirPath)
 
-      files.forEach((file: string) => {
-        const filePath = join(dirPath, file)
-        if (fs.statSync(filePath).isDirectory()) {
-          arrayOfFiles = getAllEmailFiles(filePath, arrayOfFiles)
-        }
-        else {
-          arrayOfFiles.push(filePath)
-        }
-      })
+    //   files.forEach((file: string) => {
+    //     const filePath = join(dirPath, file)
+    //     if (fs.statSync(filePath).isDirectory()) {
+    //       arrayOfFiles = getAllEmailFiles(filePath, arrayOfFiles)
+    //     }
+    //     else {
+    //       arrayOfFiles.push(filePath)
+    //     }
+    //   })
 
-      return arrayOfFiles
-    }
+    //   return arrayOfFiles
+    // }
 
-    const emailFiles = getAllEmailFiles(emailsDir)
-    if (emailFiles.length > 0) {
-      console.log('Email files:', emailFiles)
-    }
+    // const emailFiles = getAllEmailFiles(emailsDir)
+    // if (emailFiles.length > 0) {
+    //   console.log('Email files:', emailFiles)
+    // }
   },
 })
