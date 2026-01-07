@@ -13,6 +13,19 @@ A powerful Nuxt 4 module for managing email templates in your application. Build
 
 Stop wrestling with HTML email templates scattered across your codebase. `nuxt-gen-emails` brings the joy of Vue component development to email creation — complete with live preview, reactive stores, TypeScript support, and hot reloading.
 
+## Use Case
+
+This module is designed for applications that need to generate and send emails via API endpoints. It transforms your Vue email templates into type-safe POST endpoints that backend services can call to render HTML emails and deliver them through your email service provider (Resend, SendGrid, etc.).
+
+**Perfect for:**
+- Microservices architectures where email rendering is centralized
+- Transactional emails triggered by backend events (user registration, password resets, order confirmations)
+- Marketing automation systems that need on-demand email generation
+- Multi-tenant applications with customizable email templates
+- Teams that want to preview and test emails before deployment
+
+Instead of maintaining HTML strings or complicated template engines in your backend, your backend services simply POST data to the email API endpoints, and the module handles rendering the Vue components into production-ready HTML.
+
 ## Features
 
 - 🎨 **Live Preview UI** — Interactive preview with real-time data editing at `/__emails/`
