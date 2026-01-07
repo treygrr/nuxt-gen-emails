@@ -14,7 +14,7 @@ import { definePageMeta } from '#imports'
 import EmailsLayout from '${emailsLayoutPath}'
 import EmailComponent from '${emailComponentPath}'${hasDataStore
   ? `
-import * as emailStore from '${dataStorePath}'`  // Conditionally import the store if it exists
+import * as emailStore from '${dataStorePath}'` // Conditionally import the store if it exists
   : ''}  // Otherwise just... don't. Simple. Elegant. Chaos.
 
 definePageMeta({
