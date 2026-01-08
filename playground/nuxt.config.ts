@@ -8,7 +8,7 @@ export default defineNuxtConfig({
   // Hook into email sending via Nitro hooks
   nitro: {
     hooks: {
-      'nuxt-gen-emails:send': async ({ html, data }) => {
+      nuxtGenEmailsSend: async ({ html, data }) => {
         console.log('📧 Sending email...')
         console.log('📊 Data:', data)
         console.log('📄 HTML length:', html.length, 'chars')

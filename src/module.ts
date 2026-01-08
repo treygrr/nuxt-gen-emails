@@ -1,7 +1,8 @@
-import { defineNuxtModule, createResolver, extendPages, addImports, addServerImports } from '@nuxt/kit'
+import { defineNuxtModule, createResolver, extendPages, addImports, addServerImports, addTypeTemplate, addServerPlugin } from '@nuxt/kit'
 import { join } from 'pathe'
 import fs from 'node:fs'
 import { generateWrapperComponent } from './module-utils/generate-wrapper-component'
+import { generateApiRoute } from './cli/utils/generate-api-route'
 
 // Module options TypeScript interface definition
 export interface ModuleOptions {
@@ -12,7 +13,7 @@ export interface ModuleOptions {
    * If not provided, a random key will be generated and logged.
    * Set to false to disable authentication (not recommended for production).
    */
-  apiKey?: string | false
+  apiKey?: string | boolean
   /**
    * Rate limiting configuration for email API endpoints.
    * @default { maxRequests: 10, windowMs: 60000 }
@@ -85,6 +86,10 @@ export default defineNuxtModule<ModuleOptions>({
       },
     ])
 
+
+    // Register the Nitro plugin for handling email send events
+    addServerPlugin(resolver.resolve('./runtime/server/plugins/email-send'))
+
     // Register the emails directory in the app directory
     const configuredEmailDir = options.emailDir ?? 'emails'
 
@@ -94,23 +99,79 @@ export default defineNuxtModule<ModuleOptions>({
     nuxt.options.runtimeConfig.nuxtGenEmails = {
       emailsDir,
       apiKey,
-      rateLimit: options.rateLimit,
+      rateLimit:
+        options.rateLimit === false
+          ? false
+          : options.rateLimit ?? {
+            maxRequests: 10,
+            windowMs: 60000,
+          },
     }
 
     if (fs.existsSync(emailsDir)) {
       nuxt.options.watch.push(emailsDir)
     }
 
+    // Function to generate server routes for all email templates
+    function generateServerRoutes() {
+      if (!fs.existsSync(emailsDir)) return
+
+      const serverApiDir = join(nuxt.options.rootDir, 'server', 'api', 'emails')
+
+      // Ensure the server API directory exists
+      if (!fs.existsSync(serverApiDir)) {
+        fs.mkdirSync(serverApiDir, { recursive: true })
+      }
+
+      // Recursively collect and generate routes for all email templates
+      function processEmailDirectory(dirPath: string, routePrefix: string = '') {
+        const entries = fs.readdirSync(dirPath)
+
+        for (const entry of entries) {
+          const fullPath = join(dirPath, entry)
+          const stat = fs.statSync(fullPath)
+
+          if (stat.isDirectory()) {
+            processEmailDirectory(fullPath, `${routePrefix}/${entry}`)
+          }
+          else if (entry.endsWith('.vue')) {
+            const emailName = entry.replace('.vue', '')
+            const emailPath = `${routePrefix}/${emailName}`.replace(/^\//, '')
+
+            // Create the API route file
+            const apiRouteDir = routePrefix
+              ? join(serverApiDir, routePrefix.replace(/^\//, ''))
+              : serverApiDir
+
+            if (!fs.existsSync(apiRouteDir)) {
+              fs.mkdirSync(apiRouteDir, { recursive: true })
+            }
+
+            const apiFileName = `${emailName}.post.ts`
+            const apiFilePath = join(apiRouteDir, apiFileName)
+            const apiTemplate = generateApiRoute(emailName, emailPath)
+
+            fs.writeFileSync(apiFilePath, apiTemplate, 'utf-8')
+            console.log(`[nuxt-gen-emails] Generated API route: ${apiFilePath}`)
+          }
+        }
+      }
+
+      processEmailDirectory(emailsDir)
+    }
+
     // Watch for email file changes and trigger restart
     nuxt.hook('builder:watch', async (event, path) => {
       // Watch for .vue file changes (new templates or modifications)
       if (path.startsWith(emailsDir) && path.endsWith('.vue')) {
-        console.log('[nuxt-gen-emails] Email template change detected, restarting...')
+        console.log('[nuxt-gen-emails] Email template change detected, generating routes...')
+        generateServerRoutes()
         await nuxt.callHook('restart')
       }
       // Watch for .data.ts file changes (data store modifications)
       else if (path.startsWith(emailsDir) && path.endsWith('.data.ts')) {
-        console.log('[nuxt-gen-emails] Email data store change detected, restarting...')
+        console.log('[nuxt-gen-emails] Email data store change detected, generating routes...')
+        generateServerRoutes()
         await nuxt.callHook('restart')
       }
     })
@@ -204,31 +265,7 @@ export default defineNuxtModule<ModuleOptions>({
       addEmailPages(emailsDir)
     })
 
-    // // find emails in the emails directory and list all files and subdirectories
-
-    // function getAllEmailFiles(dirPath: string, arrayOfFiles: string[] = []) {
-    //   if (!fs.existsSync(dirPath)) {
-    //     return arrayOfFiles
-    //   }
-
-    //   const files = fs.readdirSync(dirPath)
-
-    //   files.forEach((file: string) => {
-    //     const filePath = join(dirPath, file)
-    //     if (fs.statSync(filePath).isDirectory()) {
-    //       arrayOfFiles = getAllEmailFiles(filePath, arrayOfFiles)
-    //     }
-    //     else {
-    //       arrayOfFiles.push(filePath)
-    //     }
-    //   })
-
-    //   return arrayOfFiles
-    // }
-
-    // const emailFiles = getAllEmailFiles(emailsDir)
-    // if (emailFiles.length > 0) {
-    //   console.log('Email files:', emailFiles)
-    // }
+    // Generate initial server routes on module setup
+    generateServerRoutes()
   },
 })

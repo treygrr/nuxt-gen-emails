@@ -8,20 +8,21 @@ export function generateApiRoute(emailName: string, emailPath: string): string {
   // This is code generation inception: code that writes code that handles HTTP requests
   // My therapist says this is "normal" in web development. I don't believe them.
   return `import { defineEventHandler, readBody, createError, getHeader } from 'h3'
-import { encodeStoreToUrlParams, useRuntimeConfig } from '#imports'
+import { encodeStoreToUrlParams, useRuntimeConfig, useNitroApp } from '#imports'
 import type { ${className}Data } from '~/emails/${emailPath}.data'
 
 // Simple in-memory rate limiter (resets on server restart)
-const rateLimitStore = new Map<string, { count: number; resetTime: number }>()
+const rateLimitStore = new Map<string, { count: number, resetTime: number }>()
 
 export default defineEventHandler(async (event) => {
   const config = useRuntimeConfig()
 
   // Authentication check
   if (config.nuxtGenEmails.apiKey !== false) {
+    const apiKey = config.nuxtGenEmails.apiKey as unknown as string
     const providedKey = getHeader(event, 'x-api-key') || getHeader(event, 'authorization')?.replace('Bearer ', '')
 
-    if (!providedKey || providedKey !== config.nuxtGenEmails.apiKey) {
+    if (!providedKey || providedKey !== apiKey) {
       throw createError({
         statusCode: 401,
         statusMessage: 'Unauthorized: Invalid or missing API key',
@@ -30,7 +31,7 @@ export default defineEventHandler(async (event) => {
   }
 
   // Rate limiting check
-  if (config.nuxtGenEmails.rateLimit !== false) {
+  if (config.nuxtGenEmails.rateLimit) {
     const clientIp = getHeader(event, 'x-forwarded-for') || event.node.req.socket.remoteAddress || 'unknown'
     const now = Date.now()
     const limit = config.nuxtGenEmails.rateLimit
@@ -63,7 +64,7 @@ export default defineEventHandler(async (event) => {
   // We're encoding data into URL params then immediately fetching it back
   // Efficiency? Never heard of her.
   const params = encodeStoreToUrlParams(body)
-  const separator = params ? '&' : '?'  // Ternary operators: the spice of life
+  const separator = params ? '&' : '?' // Ternary operators: the spice of life
   const emailUrl = \`/__emails/${emailPath}\${params}\${separator}server=true\`
 
   // Fetch the rendered email HTML
@@ -78,15 +79,17 @@ export default defineEventHandler(async (event) => {
 
     // Call Nitro hook to allow users to send the email
     // This is where users can hook in their Resend/SendGrid/carrier pigeon integration
-    await event.context.nitro.hooks.callHook('nuxt-gen-emails:send', {
+    const nitro = useNitroApp()
+    // @ts-ignore - custom hook not recognized by Nitro types at compile time
+    await nitro.hooks.callHook('nuxt-gen-emails:send', {
       html,
       data: body,
     })
 
     return {
       success: true,
-      message: 'Email rendered successfully',  // "Successfully" is doing a lot of work here
-      html,  // Return the HTML because why not, we already have it
+      message: 'Email rendered successfully', // "Successfully" is doing a lot of work here
+      html, // Return the HTML because why not, we already have it
     }
   }
   catch (error: unknown) {
@@ -94,7 +97,7 @@ export default defineEventHandler(async (event) => {
     // Check instanceof Error because JavaScript lets you throw ANYTHING. Strings, numbers, objects, your dignity.
     const message = error instanceof Error ? error.message : 'Failed to render or send email'
     throw createError({
-      statusCode: 500,  // The universal "something broke" code
+      statusCode: 500, // The universal "something broke" code
       statusMessage: message,
     })
   }
