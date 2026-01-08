@@ -2,7 +2,9 @@ import { defineNuxtModule, createResolver, extendPages, addImports, addServerImp
 import { join } from 'pathe'
 import fs from 'node:fs'
 import { generateWrapperComponent } from './module-utils/generate-wrapper-component'
-import { generateApiRoute } from './cli/utils/generate-api-route'
+import { generateServerRoutes } from './module-utils/generate-server-routes'
+import { collectTemplates } from './module-utils/collect-templates'
+import { addEmailPages } from './module-utils/add-email-pages'
 
 // Module options TypeScript interface definition
 export interface ModuleOptions {
@@ -24,6 +26,7 @@ export interface ModuleOptions {
     /** Time window in milliseconds */
     windowMs: number
   } | false
+  sendGenEmails?: (html: string, data: Record<string, unknown>) => Promise<void> | void
 }
 
 export default defineNuxtModule<ModuleOptions>({
@@ -84,11 +87,11 @@ export default defineNuxtModule<ModuleOptions>({
         name: 'encodeStoreToUrlParams',
         from: resolver.resolve('./runtime/utils/url-params'),
       },
+      {
+        name: 'getSendGenEmailsHandler',
+        from: resolver.resolve('./runtime/server/utils/send-gen-emails'),
+      },
     ])
-
-
-    // Register the Nitro plugin for handling email send events
-    addServerPlugin(resolver.resolve('./runtime/server/plugins/email-send'))
 
     // Register the emails directory in the app directory
     const configuredEmailDir = options.emailDir ?? 'emails'
@@ -106,58 +109,11 @@ export default defineNuxtModule<ModuleOptions>({
             maxRequests: 10,
             windowMs: 60000,
           },
+      sendGenEmails: options.sendGenEmails,
     }
 
     if (fs.existsSync(emailsDir)) {
       nuxt.options.watch.push(emailsDir)
-    }
-
-    // Function to generate server routes for all email templates
-    function generateServerRoutes() {
-      if (!fs.existsSync(emailsDir)) return
-
-      const serverApiDir = join(nuxt.options.rootDir, 'server', 'api', 'emails')
-
-      // Ensure the server API directory exists
-      if (!fs.existsSync(serverApiDir)) {
-        fs.mkdirSync(serverApiDir, { recursive: true })
-      }
-
-      // Recursively collect and generate routes for all email templates
-      function processEmailDirectory(dirPath: string, routePrefix: string = '') {
-        const entries = fs.readdirSync(dirPath)
-
-        for (const entry of entries) {
-          const fullPath = join(dirPath, entry)
-          const stat = fs.statSync(fullPath)
-
-          if (stat.isDirectory()) {
-            processEmailDirectory(fullPath, `${routePrefix}/${entry}`)
-          }
-          else if (entry.endsWith('.vue')) {
-            const emailName = entry.replace('.vue', '')
-            const emailPath = `${routePrefix}/${emailName}`.replace(/^\//, '')
-
-            // Create the API route file
-            const apiRouteDir = routePrefix
-              ? join(serverApiDir, routePrefix.replace(/^\//, ''))
-              : serverApiDir
-
-            if (!fs.existsSync(apiRouteDir)) {
-              fs.mkdirSync(apiRouteDir, { recursive: true })
-            }
-
-            const apiFileName = `${emailName}.post.ts`
-            const apiFilePath = join(apiRouteDir, apiFileName)
-            const apiTemplate = generateApiRoute(emailName, emailPath)
-
-            fs.writeFileSync(apiFilePath, apiTemplate, 'utf-8')
-            console.log(`[nuxt-gen-emails] Generated API route: ${apiFilePath}`)
-          }
-        }
-      }
-
-      processEmailDirectory(emailsDir)
     }
 
     // Watch for email file changes and trigger restart
@@ -165,44 +121,19 @@ export default defineNuxtModule<ModuleOptions>({
       // Watch for .vue file changes (new templates or modifications)
       if (path.startsWith(emailsDir) && path.endsWith('.vue')) {
         console.log('[nuxt-gen-emails] Email template change detected, generating routes...')
-        generateServerRoutes()
+        generateServerRoutes(emailsDir, nuxt.options.rootDir)
         await nuxt.callHook('restart')
       }
       // Watch for .data.ts file changes (data store modifications)
       else if (path.startsWith(emailsDir) && path.endsWith('.data.ts')) {
         console.log('[nuxt-gen-emails] Email data store change detected, generating routes...')
-        generateServerRoutes()
+        generateServerRoutes(emailsDir, nuxt.options.rootDir)
         await nuxt.callHook('restart')
       }
     })
 
     // Collect email template paths for the selector
-    const emailTemplates: string[] = []
-
-    function collectTemplates(dirPath: string, routePrefix: string = '') {
-      // If the path doesn't exist, we're done here. No templates, no problem. Just me and the void.
-      if (!fs.existsSync(dirPath)) return
-
-      const entries = fs.readdirSync(dirPath)
-      // Oh boy, time to iterate through filesystem entries like we're playing filesystem roulette
-      for (const entry of entries) {
-        const fullPath = join(dirPath, entry)
-        const stat = fs.statSync(fullPath)
-
-        if (stat.isDirectory()) {
-          // IT'S A DIRECTORY?! RECURSION TIME. I love/hate recursion. Mostly hate. Who am I kidding.
-          collectTemplates(fullPath, `${routePrefix}/${entry}`)
-        }
-        else if (entry.endsWith('.vue')) {
-          // Found a Vue file! Adding it to the pile of templates we'll inevitably need to debug later
-          const name = entry.replace('.vue', '')
-          // Regex to strip leading slashes because paths are a beautiful nightmare
-          emailTemplates.push(`${routePrefix}/${name}`.replace(/^\//, ''))
-        }
-      }
-    }
-
-    collectTemplates(emailsDir)
+    const emailTemplates = collectTemplates(emailsDir)
 
     // Expose email templates via runtime config
     nuxt.options.runtimeConfig.public.nuxtGenEmails = {
@@ -215,57 +146,14 @@ export default defineNuxtModule<ModuleOptions>({
         return
       }
 
-      // Add email templates as separate pages
-      function addEmailPages(dirPath: string, routePrefix: string = '') {
-        const entries = fs.readdirSync(dirPath)
-
-        for (const entry of entries) {
-          const fullPath = join(dirPath, entry)
-          const stat = fs.statSync(fullPath)
-
-          if (stat.isDirectory()) {
-            addEmailPages(fullPath, `${routePrefix}/${entry}`)
-          }
-          else if (entry.endsWith('.vue')) {
-            const name = entry.replace('.vue', '')
-            const routePath = `/__emails${routePrefix}/${name}`
-
-            // Create a wrapper page that includes both the toolbar and the email component
-            const wrapperPath = join(nuxt.options.buildDir, 'email-wrappers', `${routePrefix}/${name}.vue`.replace(/^\//, ''))
-
-            // Ensure directory exists
-            const wrapperDir = join(nuxt.options.buildDir, 'email-wrappers', routePrefix.replace(/^\//, ''))
-            if (!fs.existsSync(wrapperDir)) {
-              fs.mkdirSync(wrapperDir, { recursive: true })
-            }
-
-            // Check if data store file exists
-            const dataFilePath = fullPath.replace('.vue', '.data.ts')
-            const hasDataStore = fs.existsSync(dataFilePath)
-
-            // Generate wrapper component
-            const wrapperContent = generateWrapperComponent(
-              resolver.resolve('./runtime/pages/__emails.vue'),
-              fullPath,
-              hasDataStore ? dataFilePath : undefined,
-            )
-
-            fs.writeFileSync(wrapperPath, wrapperContent, 'utf-8')
-
-            const pageName = `email${routePrefix.replace(/\//g, '-')}-${name}`.replace(/^-+/, '')
-            pages.push({
-              name: pageName,
-              path: routePath,
-              file: wrapperPath,
-            })
-          }
-        }
-      }
-
-      addEmailPages(emailsDir)
+      addEmailPages(emailsDir, pages, {
+        emailsDir,
+        buildDir: nuxt.options.buildDir,
+        emailTemplateComponentPath: resolver.resolve('./runtime/pages/__emails.vue'),
+      })
     })
 
     // Generate initial server routes on module setup
-    generateServerRoutes()
+    generateServerRoutes(emailsDir, nuxt.options.rootDir)
   },
 })

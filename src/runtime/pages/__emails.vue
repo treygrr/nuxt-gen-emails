@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
 import EmailTemplateSelector from '../components/EmailTemplateSelector.vue'
 import ApiTester from '../components/ApiTester.vue'
 

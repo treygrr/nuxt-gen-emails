@@ -1,5 +1,5 @@
 import { defineEventHandler, readBody, createError, getHeader } from 'h3'
-import { encodeStoreToUrlParams, useRuntimeConfig } from '#imports'
+import { encodeStoreToUrlParams, useRuntimeConfig, useNitroApp, getSendGenEmailsHandler } from '#imports'
 import type { Test1Data } from '~/emails/v1/test1.data'
 
 // Simple in-memory rate limiter (resets on server restart)
@@ -68,11 +68,21 @@ export default defineEventHandler(async (event) => {
     const response = await fetch(fullUrl)
     const html = await response.text()
 
-    // Store the email send data in context for potential middleware/hooks
-    // Users can create a plugin to handle email sending
-    event.context.nuxtGenEmails = {
-      html,
-      data: body,
+    const nitro = useNitroApp()
+    const sendGenEmailsHandler = getSendGenEmailsHandler()
+
+    // If sendGenEmails function is provided in config, use it
+    if (sendGenEmailsHandler) {
+      await sendGenEmailsHandler(html, body)
+    }
+    else {
+      // Otherwise, call the Nitro hook to allow users to send the email
+      // This is where users can hook in their Resend/SendGrid/carrier pigeon integration
+      // @ts-ignore - custom hook not recognized by Nitro types at compile time
+      await nitro.hooks.callHook('nuxt-gen-emails:send', {
+        html,
+        data: body,
+      })
     }
 
     return {

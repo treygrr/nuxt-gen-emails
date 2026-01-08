@@ -1,6 +1,14 @@
-import type { HookResult } from '@nuxt/schema'
+import type { ModuleOptions } from '../module'
 
 declare module '@nuxt/schema' {
+  interface NuxtConfig {
+    /**
+     * Configuration for nuxt-gen-emails module
+     * @see https://github.com/treygrr/nuxt-gen-emails
+     */
+    nuxtGenEmails?: ModuleOptions
+  }
+
   interface RuntimeConfig {
     nuxtGenEmails: {
       emailsDir: string
@@ -9,26 +17,13 @@ declare module '@nuxt/schema' {
         maxRequests: number
         windowMs: number
       } | false
+      sendGenEmails?: (html: string, data: Record<string, unknown>) => Promise<void> | void
+    }
+  }
+
+  interface PublicRuntimeConfig {
+    nuxtGenEmails: {
+      templates: string[]
     }
   }
 }
-
-declare module '#app' {
-  interface RuntimeNuxtHooks {
-    'nuxt-gen-emails:send': (payload: {
-      html: string
-      data: Record<string, unknown>
-    }) => HookResult
-  }
-}
-
-declare module 'nitropack/types' {
-  interface NitroRuntimeHooks {
-    'nuxt-gen-emails:send': (payload: {
-      html: string
-      data: Record<string, unknown>
-    }) => void | Promise<void>
-  }
-}
-
-export {}
